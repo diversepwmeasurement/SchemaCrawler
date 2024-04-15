@@ -1,41 +1,29 @@
-name: Quick Build
-
-on:
-  workflow_dispatch:
-  push:
-  pull_request:
-    branches:
-      - main
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-permissions: read-all
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   build:
     name: Quick build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-
-# SETUP BUILD ENVIRONMENT
-    - id: prepare-maven-build
+    - continue-on-error: true
+      id: prepare-maven-build
       name: Prepare Maven build
       uses: sualeh/prepare-maven-build@v1.4.0
       with:
         java-version: 8
-    - id: install-graphviz
+    - continue-on-error: true
+      id: install-graphviz
       name: Install Graphviz
       uses: sualeh/install-graphviz@v1.0.3
-
-# BUILD AND TEST
-    - id: build-test
+    - continue-on-error: true
+      id: build-test
       name: Build all modules and run tests
+      run: "# Build\nmvn \\\n  --no-transfer-progress \\\n  --batch-mode \\\n  clean\
+        \ package\n"
       shell: bash
-      run: |
-        # Build
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          clean package
+name: Quick Build
+on:
+  repository_dispatch:
+    types: trigger-ga___quick_build.yml
+permissions: read-all

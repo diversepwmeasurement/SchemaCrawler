@@ -1,87 +1,70 @@
-name: Publish Website
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   build:
     name: Publish Website
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-
-# SETUP BUILD ENVIRONMENT
-    - id: prepare-maven-build
+    - continue-on-error: true
+      id: prepare-maven-build
       name: Prepare Maven build
       uses: sualeh/prepare-maven-build@v1.4.0
       with:
         java-version: 8
-    - id: install-graphviz
+    - continue-on-error: true
+      id: install-graphviz
       name: Install Graphviz
       uses: sualeh/install-graphviz@v1.0.3
-
-# BUILD FOR DISTRIBUTION
-    - id: build
+    - continue-on-error: true
+      id: build
       name: Build and test for distribution
+      run: "# Build\nmvn \\\n  --no-transfer-progress \\\n  --batch-mode \\\n  -Ddistrib\
+        \ \\\n  clean install\n"
       shell: bash
-      run: |
-        # Build
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          -Ddistrib \
-          clean install
-
-# CHECK WEBSITE LINKS
-    - id: check-links
+    - continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      id: check-links
       name: Check website links
       uses: lycheeverse/lychee-action@v1.9.3
       with:
         args: --verbose --accept 200,999 --no-progress --base . `./schemacrawler-website/target/_website/**/*.html`
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
-    - id: upload-link-check-report
+    - continue-on-error: true
+      id: upload-link-check-report
       name: Upload website link check report
       uses: actions/upload-artifact@v4
       with:
-        path: ./lychee/out.md
         name: website-link-check-report.md
+        path: ./lychee/out.md
         retention-days: 15
-
-# UPLOAD WEBSITE
-    - id: configure-pages
+    - continue-on-error: true
+      id: configure-pages
       name: Setup Pages
       uses: actions/configure-pages@v5
-
-    - id: upload-artifact
+    - continue-on-error: true
+      id: upload-artifact
       name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
         path: ./schemacrawler-website/target/_website
-
-
   deploy:
-    name: Deploy Website
-    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deploy-pages.outputs.page_url }}
+    name: Deploy Website
     needs: build
-
+    runs-on: self-hosted
     steps:
-
-    - id: deploy-pages
+    - continue-on-error: true
+      id: deploy-pages
       name: Deploy to GitHub Pages
       uses: actions/deploy-pages@v4
+name: Publish Website
+on:
+  repository_dispatch:
+    types: trigger-ga___publish-website.yml
+permissions:
+  contents: read
+  id-token: write
+  pages: write

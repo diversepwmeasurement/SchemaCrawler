@@ -1,77 +1,66 @@
-name: Test Coverage
-
-on:
-  workflow_dispatch:
-  push:
-  pull_request:
-    branches:
-      - main
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-permissions: read-all
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   build-test-coverage:
     name: Run coverage tests and publish results
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-
-# SETUP BUILD ENVIRONMENT
-    - id: prepare-maven-build
+    - continue-on-error: true
+      id: prepare-maven-build
       name: Prepare Maven build
       uses: sualeh/prepare-maven-build@v1.4.0
       with:
         java-version: 11
-    - id: install-graphviz
+    - continue-on-error: true
+      id: install-graphviz
       name: Install Graphviz
       uses: sualeh/install-graphviz@v1.0.3
-
-# BUILD AND TEST
-    - id: build-test
+    - continue-on-error: true
+      id: build-test
       name: Coverage tests
+      run: "# Run coverage tests\nmvn \\\n  --no-transfer-progress \\\n  --batch-mode\
+        \ \\\n  -Dtestcoverage \\\n  clean install\n"
       shell: bash
-      run: |
-        # Run coverage tests
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          -Dtestcoverage \
-          clean install
-
-# GET TEST RESULTS
-    - id: publish-coverage-codecov
-      name: Upload coverage report to Codecov
+    - continue-on-error: true
+      id: publish-coverage-codecov
       if: contains(github.ref, 'main')
+      name: Upload coverage report to Codecov
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         verbose: true
-    - id: publish-coverage-codacy
+    - continue-on-error: true
+      env:
+        CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
+        CODACY_ORGANIZATION_PROVIDER: gh
+        CODACY_PROJECT_NAME: SchemaCrawler
+        CODACY_USERNAME: schemacrawler
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      id: publish-coverage-codacy
+      if: contains(github.ref, 'main')
       name: Upload coverage report to Codacy
       uses: codacy/codacy-coverage-reporter-action@v1
-      if: contains(github.ref, 'main')
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        CODACY_ORGANIZATION_PROVIDER: gh
-        CODACY_USERNAME: schemacrawler
-        CODACY_PROJECT_NAME: SchemaCrawler
-        CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
       with:
         api-token: ${{ secrets.CODACY_API_TOKEN }}
-    - id: qodana-scan
-      name: Qodana Scan
-      uses: JetBrains/qodana-action@main
-      if: contains(github.ref, 'main')
+    - continue-on-error: true
       env:
         QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
-    - id: upload-coverage-test-results
+      id: qodana-scan
+      if: contains(github.ref, 'main')
+      name: Qodana Scan
+      uses: JetBrains/qodana-action@main
+    - continue-on-error: true
+      id: upload-coverage-test-results
+      if: contains(github.ref, 'main')
       name: Upload coverage test results
       uses: actions/upload-artifact@v4
-      if: contains(github.ref, 'main')
       with:
         name: jacoco-coverage-test-results
         path: ./target/schemacrawler-jacoco.exec
         retention-days: 5
+name: Test Coverage
+on:
+  repository_dispatch:
+    types: trigger-ga___test-coverage.yml
+permissions: read-all

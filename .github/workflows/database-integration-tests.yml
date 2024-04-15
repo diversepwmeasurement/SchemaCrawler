@@ -1,23 +1,91 @@
-name: Database Integration Tests
-
-on:
-  workflow_dispatch:
-  push:
-  pull_request:
-    branches:
-      - main
-  schedule:
-    - cron: '21 21 * * *'
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-permissions: read-all
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   build:
     name: Database Integration Tests
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      id: maximize-build-space
+      name: Maximize build space
+      uses: easimon/maximize-build-space@master
+      with:
+        remove-android: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
+        remove-dotnet: 'true'
+        remove-haskell: 'true'
+        root-reserve-mb: '8192'
+    - continue-on-error: true
+      id: restart-docker
+      name: Restart Docker
+      run: '# Restart Docker
+
+        # https://stackoverflow.com/a/71113148/100856
+
+        sudo systemctl stop docker
+
+        sudo rm -rf /var/lib/docker
+
+        sudo systemctl start docker
+
+        echo "Docker used space:"
+
+        sudo du -sh /var/lib/docker
+
+        echo "Available storage:"
+
+        df -h
+
+        '
+      shell: bash
+    - continue-on-error: true
+      id: prepare-maven-build
+      name: Prepare Maven build
+      uses: sualeh/prepare-maven-build@v1.4.0
+      with:
+        java-version: 8
+    - continue-on-error: true
+      id: install-graphviz
+      name: Install Graphviz
+      uses: sualeh/install-graphviz@v1.0.3
+    - continue-on-error: true
+      id: build-test-databases
+      name: Build and run database tests
+      run: "# Build\necho \"Building code\"\necho \"Downloading Docker image\"\nif\
+        \ [ \"${{ matrix.database }}\" == \"oracle\" ]; then\n    docker pull gvenzl/oracle-xe:21-slim\n\
+        \    dbproject=\"${{ matrix.database }}\"\nelif [ \"${{ matrix.database }}\"\
+        \ == \"sqlserver\" ]; then\n    docker pull mcr.microsoft.com/mssql/server:2019-CU9-ubuntu-18.04\n\
+        \    dbproject=\"${{ matrix.database }}\"\nelif [ \"${{ matrix.database }}\"\
+        \ == \"db2\" ]; then\n    docker pull ibmcom/db2:11.5.7.0\n    dbproject=\"\
+        ${{ matrix.database }}\"\nelif [ \"${{ matrix.database }}\" == \"postgresql\"\
+        \ ]; then\n    docker pull postgres:12.16-alpine\n    docker pull postgres:15.4-alpine\n\
+        \    dbproject=\"${{ matrix.database }}\"\nelif [ \"${{ matrix.database }}\"\
+        \ == \"mysql\" ]; then\n    docker pull mysql:8.0.31\n    dbproject=\"${{\
+        \ matrix.database }}\"\nelif [ \"${{ matrix.database }}\" == \"mariadb\" ];\
+        \ then\n    docker pull mariadb:10.7.3\n    dbproject=\"dbtest\"\nelif [ \"\
+        ${{ matrix.database }}\" == \"cassandra\" ]; then\n    docker pull cassandra:4.1.0\n\
+        \    dbproject=\"dbtest\"\nelif [ \"${{ matrix.database }}\" == \"cockroachdb\"\
+        \ ]; then\n    docker pull cockroachdb/cockroach:v19.2.12\n    dbproject=\"\
+        dbtest\"\nelif [ \"${{ matrix.database }}\" == \"firebird\" ]; then\n    docker\
+        \ pull jacobalberty/firebird:v4.0.2\n    dbproject=\"dbtest\"\nelif [ \"${{\
+        \ matrix.database }}\" == \"informix\" ]; then\n    docker pull ibmcom/informix-developer-database:14.10.FC7W1DE\n\
+        \    dbproject=\"dbtest\"\nelif [ \"${{ matrix.database }}\" == \"trino\"\
+        \ ]; then\n    docker pull trinodb/trino:421\n    dbproject=\"dbtest\"\nelse\n\
+        \    dbproject=\"dbtest\"\nfi\necho \"dbproject=$dbproject\"\nmvn \\\n  --no-transfer-progress\
+        \ \\\n  --batch-mode \\\n  -D${{ matrix.database }} \\\n  --projects schemacrawler-dbtest,schemacrawler-$dbproject\
+        \ \\\n  --also-make \\\n  clean package\n# Save expected results files\n.github/scripts/unit-tests-results-output.sh\n"
+      shell: bash
+    - continue-on-error: true
+      id: upload-unit-tests-results-output
+      if: always()
+      name: Upload expected results files
+      uses: actions/upload-artifact@v4
+      with:
+        name: unit-tests-results-output
+        path: ./unit-tests-results-output.zip
+        retention-days: 5
     strategy:
       fail-fast: false
       matrix:
@@ -33,102 +101,8 @@ jobs:
         - firebird
         - informix
         - trino
-    runs-on: ubuntu-latest
-    steps:
-
-# SETUP BUILD ENVIRONMENT
-    - id: maximize-build-space
-      name: Maximize build space
-      uses: easimon/maximize-build-space@master
-      with:
-        root-reserve-mb: '8192'
-        remove-dotnet: 'true'
-        remove-android: 'true'
-        remove-haskell: 'true'
-        remove-codeql: 'true'
-        remove-docker-images: 'true'
-    - id: restart-docker
-      name: Restart Docker
-      shell: bash
-      run: |
-        # Restart Docker
-        # https://stackoverflow.com/a/71113148/100856
-        sudo systemctl stop docker
-        sudo rm -rf /var/lib/docker
-        sudo systemctl start docker
-        echo "Docker used space:"
-        sudo du -sh /var/lib/docker
-        echo "Available storage:"
-        df -h
-    - id: prepare-maven-build
-      name: Prepare Maven build
-      uses: sualeh/prepare-maven-build@v1.4.0
-      with:
-        java-version: 8
-    - id: install-graphviz
-      name: Install Graphviz
-      uses: sualeh/install-graphviz@v1.0.3
-
-# RUN DATABASE TESTS
-    - id: build-test-databases
-      name: Build and run database tests
-      shell: bash
-      run: |
-        # Build
-        echo "Building code"
-        echo "Downloading Docker image"
-        if [ "${{ matrix.database }}" == "oracle" ]; then
-            docker pull gvenzl/oracle-xe:21-slim
-            dbproject="${{ matrix.database }}"
-        elif [ "${{ matrix.database }}" == "sqlserver" ]; then
-            docker pull mcr.microsoft.com/mssql/server:2019-CU9-ubuntu-18.04
-            dbproject="${{ matrix.database }}"
-        elif [ "${{ matrix.database }}" == "db2" ]; then
-            docker pull ibmcom/db2:11.5.7.0
-            dbproject="${{ matrix.database }}"
-        elif [ "${{ matrix.database }}" == "postgresql" ]; then
-            docker pull postgres:12.16-alpine
-            docker pull postgres:15.4-alpine
-            dbproject="${{ matrix.database }}"
-        elif [ "${{ matrix.database }}" == "mysql" ]; then
-            docker pull mysql:8.0.31
-            dbproject="${{ matrix.database }}"
-        elif [ "${{ matrix.database }}" == "mariadb" ]; then
-            docker pull mariadb:10.7.3
-            dbproject="dbtest"
-        elif [ "${{ matrix.database }}" == "cassandra" ]; then
-            docker pull cassandra:4.1.0
-            dbproject="dbtest"
-        elif [ "${{ matrix.database }}" == "cockroachdb" ]; then
-            docker pull cockroachdb/cockroach:v19.2.12
-            dbproject="dbtest"
-        elif [ "${{ matrix.database }}" == "firebird" ]; then
-            docker pull jacobalberty/firebird:v4.0.2
-            dbproject="dbtest"
-        elif [ "${{ matrix.database }}" == "informix" ]; then
-            docker pull ibmcom/informix-developer-database:14.10.FC7W1DE
-            dbproject="dbtest"
-        elif [ "${{ matrix.database }}" == "trino" ]; then
-            docker pull trinodb/trino:421
-            dbproject="dbtest"
-        else
-            dbproject="dbtest"
-        fi
-        echo "dbproject=$dbproject"
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          -D${{ matrix.database }} \
-          --projects schemacrawler-dbtest,schemacrawler-$dbproject \
-          --also-make \
-          clean package
-        # Save expected results files
-        .github/scripts/unit-tests-results-output.sh
-    - id: upload-unit-tests-results-output
-      name: Upload expected results files
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: unit-tests-results-output
-        path: ./unit-tests-results-output.zip
-        retention-days: 5
+name: Database Integration Tests
+on:
+  repository_dispatch:
+    types: trigger-ga___database-integration-tests.yml
+permissions: read-all

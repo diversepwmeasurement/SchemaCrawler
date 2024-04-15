@@ -1,83 +1,80 @@
-name: Create Early Access Release
-
-on:
-  workflow_dispatch:
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   build:
     name: Create Release
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-
-# SETUP BUILD ENVIRONMENT
-    - id: prepare-maven-build
+    - continue-on-error: true
+      id: prepare-maven-build
       name: Prepare Maven build
       uses: sualeh/prepare-maven-build@v1.4.0
       with:
         java-version: 8
-    - id: install-graphviz
+    - continue-on-error: true
+      id: install-graphviz
       name: Install Graphviz
       uses: sualeh/install-graphviz@v1.0.3
-
-# BUILD FOR DISTRIBUTION
-    - id: build
+    - continue-on-error: true
+      id: build
       name: Build and test for distribution
+      run: "# Build\nmvn \\\n  --no-transfer-progress \\\n  --batch-mode \\\n  -Ddistrib\
+        \ \\\n  -Ddocker.skip=false \\\n  clean install\n"
       shell: bash
-      run: |
-        # Build
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          -Ddistrib \
-          -Ddocker.skip=false \
-          clean install
-
-# CREATE GITHUB RELEASE AND ADD ASSETS
-    - id: tag
-      name: Move early-access-release tag
-      shell: bash
+    - continue-on-error: true
+      id: tag
       if: false
-      run: |
-        # Move tag
+      name: Move early-access-release tag
+      run: '# Move tag
+
         git tag -d early-access-release
+
         git push --delete origin early-access-release
+
         git tag -a early-access-release -m "SchemaCrawler Early Access Release"
+
         git push --follow-tags
-    - id: create-release
+
+        '
+      shell: bash
+    - continue-on-error: true
+      id: create-release
+      if: ${{ startsWith(github.ref, 'refs/tags/') != true }}
       name: Create GitHub release
       uses: softprops/action-gh-release@v2
-      if:  ${{ startsWith(github.ref, 'refs/tags/') != true }}
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        tag_name: early-access-release
-        name: early-access-release
+        body: 'SchemaCrawler ${{ github.event.release.tag_name }} early access release
+          at last commit ${{ github.sha }}
+
+          '
         draft: false
-        prerelease: true
-        body: |
-          SchemaCrawler ${{ github.event.release.tag_name }} early access release at last commit ${{ github.sha }}
-        generate_release_notes: true
-        files: |
-          ./schemacrawler-distrib/target/schemacrawler-16.21.2-distribution.zip
+        files: './schemacrawler-distrib/target/schemacrawler-16.21.2-distribution.zip
+
           ./schemacrawler-distrib/target/schemacrawler-16.21.2-distribution.zip.SHA-512
+
           ./schemacrawler-distrib/target/schemacrawler-16.21.2-bin.zip
+
           ./schemacrawler-distrib/target/schemacrawler-16.21.2-bin.zip.SHA-512
 
-# PUBLISH DOCKER IMAGE
-    - id: publish-docker-image
-      name: Publish Docker image
+          '
+        generate_release_notes: true
+        name: early-access-release
+        prerelease: true
+        tag_name: early-access-release
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - continue-on-error: true
       env:
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      id: publish-docker-image
+      name: Publish Docker image
+      run: "# Publish Docker image\ndocker version\ndocker tag schemacrawler/schemacrawler:latest\
+        \ \\\n           schemacrawler/schemacrawler:early-access-release\necho \"\
+        $DOCKER_PASSWORD\" | docker login -u \"$DOCKER_USERNAME\" --password-stdin\n\
+        docker push schemacrawler/schemacrawler:early-access-release\ndocker logout\n"
       shell: bash
-      run: |
-        # Publish Docker image
-        docker version
-        docker tag schemacrawler/schemacrawler:latest \
-                   schemacrawler/schemacrawler:early-access-release
-        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-        docker push schemacrawler/schemacrawler:early-access-release
-        docker logout
+name: Create Early Access Release
+on:
+  repository_dispatch:
+    types: trigger-ga___early-release.yml

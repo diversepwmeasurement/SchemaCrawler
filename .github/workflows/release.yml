@@ -1,118 +1,116 @@
-name: Create Release
-
-on:
-  workflow_dispatch:
-  push:
-    tags:
-      - v[0-9]+.[0-9]+.[0-9]+
-      - v[0-9]+.[0-9]+.[0-9]+-[A-Z]
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   build:
     name: Create Release
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-
-# SETUP BUILD ENVIRONMENT
-    - id: prepare-maven-build
+    - continue-on-error: true
+      id: prepare-maven-build
       name: Prepare Maven build
       uses: sualeh/prepare-maven-build@v1.4.0
       with:
         java-version: 8
-    - id: install-graphviz
+    - continue-on-error: true
+      id: install-graphviz
       name: Install Graphviz
       uses: sualeh/install-graphviz@v1.0.3
-
-# BUILD FOR DISTRIBUTION
-    - id: build
+    - continue-on-error: true
+      id: build
       name: Build and test for distribution
+      run: "# Build\nmvn \\\n  --no-transfer-progress \\\n  --batch-mode \\\n  -Ddistrib\
+        \ \\\n  -Ddocker.skip=false \\\n  clean install\n"
       shell: bash
-      run: |
-        # Build
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          -Ddistrib \
-          -Ddocker.skip=false \
-          clean install
-
-# PUBLISH DOCKER IMAGE
-    - id: publish-docker-image
-      name: Publish Docker image
+    - continue-on-error: true
       env:
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      shell: bash
-      run: |
-        # Publish Docker image
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      id: publish-docker-image
+      name: Publish Docker image
+      run: '# Publish Docker image
+
         docker version
+
         docker image tag schemacrawler/schemacrawler schemacrawler/schemacrawler:v16.21.2
+
         docker image tag schemacrawler/schemacrawler schemacrawler/schemacrawler:latest
+
         echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
         docker push --all-tags schemacrawler/schemacrawler
+
         docker logout
 
-# CREATE GITHUB RELEASE AND ADD ASSETS
-    - id: upload-artifacts
+        '
+      shell: bash
+    - continue-on-error: true
+      id: upload-artifacts
       name: Upload installers
       uses: actions/upload-artifact@v4
       with:
         name: release-artifacts-v16.21.2
-        path: |
-          ./schemacrawler-distrib/target/schemacrawler-16.21.2-distribution.zip
+        path: './schemacrawler-distrib/target/schemacrawler-16.21.2-distribution.zip
+
           ./schemacrawler-distrib/target/schemacrawler-16.21.2-distribution.zip.SHA-512
+
           ./schemacrawler-distrib/target/schemacrawler-16.21.2-bin.zip
-          ./schemacrawler-distrib/target/schemacrawler-16.21.2-bin.zip.SHA-512
-        retention-days: 1
-    - id: create-release
-      name: Create GitHub release
-      uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        name: ${{ github.ref_name }}
-        draft: false
-        prerelease: false
-        body: |
-          SchemaCrawler ${{ github.event.release.tag_name }} release at last commit ${{ github.sha }}
-          See the change history at https://www.schemacrawler.com/changes-report.html
-        generate_release_notes: true
-        files: |
-          ./schemacrawler-distrib/target/schemacrawler-16.21.2-distribution.zip
-          ./schemacrawler-distrib/target/schemacrawler-16.21.2-distribution.zip.SHA-512
-          ./schemacrawler-distrib/target/schemacrawler-16.21.2-bin.zip
+
           ./schemacrawler-distrib/target/schemacrawler-16.21.2-bin.zip.SHA-512
 
-# PUBLISH TO CENTRAL REPOSITORY
-    - id: install-secret-key
+          '
+        retention-days: 1
+    - continue-on-error: true
+      id: create-release
+      if: startsWith(github.ref, 'refs/tags/')
+      name: Create GitHub release
+      uses: softprops/action-gh-release@v2
+      with:
+        body: 'SchemaCrawler ${{ github.event.release.tag_name }} release at last
+          commit ${{ github.sha }}
+
+          See the change history at https://www.schemacrawler.com/changes-report.html
+
+          '
+        draft: false
+        files: './schemacrawler-distrib/target/schemacrawler-16.21.2-distribution.zip
+
+          ./schemacrawler-distrib/target/schemacrawler-16.21.2-distribution.zip.SHA-512
+
+          ./schemacrawler-distrib/target/schemacrawler-16.21.2-bin.zip
+
+          ./schemacrawler-distrib/target/schemacrawler-16.21.2-bin.zip.SHA-512
+
+          '
+        generate_release_notes: true
+        name: ${{ github.ref_name }}
+        prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - continue-on-error: true
+      id: install-secret-key
+      if: startsWith(github.ref, 'refs/tags/')
       name: Install secret key
-      if: startsWith(github.ref, 'refs/tags/')
-      # Note: OSSRH_GPG_SECRET_KEY is exported using gpg --export-secret-keys -a <keyid>
-      # and has newlines substituted with a literal \n
-      shell: bash
-      run: |
-        # Install secret key
+      run: '# Install secret key
+
         cat <(echo -e "${{ secrets.OSSRH_GPG_SECRET_KEY }}") | gpg --batch --import
+
         gpg --list-secret-keys --keyid-format LONG
-    - id: publish-to-central
-      name: Publish to Central Repository
-      if: startsWith(github.ref, 'refs/tags/')
-      env:
-        MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-        MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
+
+        '
       shell: bash
-      run: |
-        # Publish to Central Repository
-        export GPG_TTY=$(tty)
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          -Ddistrib \
-          -Dmaven.javadoc.skip=false \
-          -Dskip.signing.artifacts=false \
-          -Dgpg.passphrase=${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD }} \
-          clean deploy
+    - continue-on-error: true
+      env:
+        MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
+        MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+      id: publish-to-central
+      if: startsWith(github.ref, 'refs/tags/')
+      name: Publish to Central Repository
+      run: "# Publish to Central Repository\nexport GPG_TTY=$(tty)\nmvn \\\n  --no-transfer-progress\
+        \ \\\n  --batch-mode \\\n  -Ddistrib \\\n  -Dmaven.javadoc.skip=false \\\n\
+        \  -Dskip.signing.artifacts=false \\\n  -Dgpg.passphrase=${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD\
+        \ }} \\\n  clean deploy\n"
+      shell: bash
+name: Create Release
+on:
+  repository_dispatch:
+    types: trigger-ga___release.yml

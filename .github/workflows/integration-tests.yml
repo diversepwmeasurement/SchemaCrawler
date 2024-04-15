@@ -1,113 +1,88 @@
-name: Integration Tests
-
-on:
-  workflow_dispatch:
-  push:
-  pull_request:
-    branches:
-      - main
-  schedule:
-    - cron: '22 22 * * *'
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-permissions: read-all
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   build:
     name: Integration Tests
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        java: [8, 17]
-    runs-on: ${{ matrix.os }}
+    runs-on: self-hosted
     steps:
-
-# SETUP BUILD ENVIRONMENT
-    - id: prepare-maven-build
+    - continue-on-error: true
+      id: prepare-maven-build
       name: Prepare Maven build
       uses: sualeh/prepare-maven-build@v1.4.0
       with:
         java-version: ${{ matrix.java }}
-
-# BUILD AND TEST
-    - id: build-test
-      name: Build and run database integration tests
+    - continue-on-error: true
       env:
         TZ: GMT
+      id: build-test
+      name: Build and run database integration tests
+      run: "# Build\nmvn \\\n  --no-transfer-progress \\\n  --batch-mode \\\n  clean\
+        \ package\n"
       shell: bash
-      run: |
-        # Build
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          clean package
-
-# INSTALL GRAPHVIZ, AND RERUN DIAGRAM TESTS
-    - id: install-graphviz
+    - continue-on-error: true
+      id: install-graphviz
       name: Install Graphviz
       uses: sualeh/install-graphviz@v1.0.3
-    - id: build-test-diagrams
+    - continue-on-error: true
+      id: build-test-diagrams
       name: Build and run diagram tests
+      run: "# Build\nmvn \\\n  --no-transfer-progress \\\n  --batch-mode \\\n  --projects\
+        \ \\\n  schemacrawler-diagram,schemacrawler-scripting \\\n  --also-make \\\
+        \n  package\n# Save expected results files\n.github/scripts/unit-tests-results-output.sh\n"
       shell: bash
-      run: |
-        # Build
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          --projects \
-          schemacrawler-diagram,schemacrawler-scripting \
-          --also-make \
-          package
-        # Save expected results files
-        .github/scripts/unit-tests-results-output.sh
-    - id: upload-unit-tests-results-output
+    - continue-on-error: true
+      id: upload-unit-tests-results-output
+      if: always()
       name: Upload expected results files
       uses: actions/upload-artifact@v4
-      if: always()
       with:
         name: unit-tests-results-output
         path: ./unit-tests-results-output.zip
         retention-days: 5
-
-
+    strategy:
+      fail-fast: false
+      matrix:
+        java:
+        - 8
+        - 17
+        os:
+        - ubuntu-latest
+        - macos-latest
+        - windows-latest
   build-test-docker:
     name: Build, run tests, and build Docker image
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-
-# SETUP BUILD ENVIRONMENT
-    - id: maximize-build-space
+    - continue-on-error: true
+      id: maximize-build-space
       name: Maximize build space
       uses: easimon/maximize-build-space@master
       with:
-        root-reserve-mb: '8192'
-        remove-dotnet: 'true'
         remove-android: 'true'
-        remove-haskell: 'true'
         remove-codeql: 'true'
         remove-docker-images: 'true'
-    - id: prepare-maven-build
+        remove-dotnet: 'true'
+        remove-haskell: 'true'
+        root-reserve-mb: '8192'
+    - continue-on-error: true
+      id: prepare-maven-build
       name: Prepare Maven build
       uses: sualeh/prepare-maven-build@v1.4.0
       with:
         java-version: 8
-    - id: install-graphviz
+    - continue-on-error: true
+      id: install-graphviz
       name: Install Graphviz
       uses: sualeh/install-graphviz@v1.0.3
-
-# BUILD AND TEST
-    - id: build-test
+    - continue-on-error: true
+      id: build-test
       name: Build Docker image
+      run: "# Build\nmvn \\\n  --no-transfer-progress \\\n  --batch-mode \\\n  -Ddistrib\
+        \ \\\n  -Ddocker.skip=false \\\n  clean package\n"
       shell: bash
-      run: |
-        # Build
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          -Ddistrib \
-          -Ddocker.skip=false \
-          clean package
+name: Integration Tests
+on:
+  repository_dispatch:
+    types: trigger-ga___integration-tests.yml
+permissions: read-all

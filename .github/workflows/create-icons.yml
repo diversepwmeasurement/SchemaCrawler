@@ -1,67 +1,40 @@
-name: Create Icons
-
-on:
-  workflow_dispatch:
-
-permissions: read-all
-
 jobs:
   build:
     name: Create Icons
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-
-# CHECKOUT CODE
-    - id: checkout-code
+    - continue-on-error: true
+      id: checkout-code
       name: Checkout code
       uses: actions/checkout@v4
-
-# CREATE ICONS
-    - id: create-icons
+    - continue-on-error: true
+      id: create-icons
       name: Create icons for different platforms
-      run: |
-        # Create icons for different platforms
-        convert -version
-        # Create 180 pixel icon
-        convert \
-          -background transparent \
-          -density 1000 \
-          -resize 150x150 \
-          -border 30 \
-          -bordercolor transparent \
-          ./schemacrawler-website/src/site/resources/images/schemacrawler_logo.svg \
-          ./schemacrawler-website/src/site/resources/images/schemacrawler_logo.png
-        # Create ico icon
-        convert \
-          -background transparent \
-          -density 256x256 \
-          -define icon:auto-resize \
-          -colors 256 \
-          ./schemacrawler-website/src/site/resources/images/schemacrawler_logo.svg \
-          ./schemacrawler-website/src/site/resources/images/schemacrawler_logo.ico
-        # Create left-aligned 16:9 banner in two steps
-        convert \
-          -background transparent \
-          -density 1000 \
-          -resize 450x450 \
-          -border 100 \
-          -bordercolor transparent \
-          ./schemacrawler-website/src/site/resources/images/schemacrawler_logo.svg \
-          ./schemacrawler-website/src/site/resources/images/schemacrawler_banner.png
-        convert \
-          -background transparent \
-          -density 1000 \
-          -extent 1200x675 \
-          -gravity west \
-          -bordercolor transparent \
-          ./schemacrawler-website/src/site/resources/images/schemacrawler_banner.png \
-          ./schemacrawler-website/src/site/resources/images/schemacrawler_banner.png
-
-# UPLOAD ICONS
-    - id: upload-icons
+      run: "# Create icons for different platforms\nconvert -version\n# Create 180\
+        \ pixel icon\nconvert \\\n  -background transparent \\\n  -density 1000 \\\
+        \n  -resize 150x150 \\\n  -border 30 \\\n  -bordercolor transparent \\\n \
+        \ ./schemacrawler-website/src/site/resources/images/schemacrawler_logo.svg\
+        \ \\\n  ./schemacrawler-website/src/site/resources/images/schemacrawler_logo.png\n\
+        # Create ico icon\nconvert \\\n  -background transparent \\\n  -density 256x256\
+        \ \\\n  -define icon:auto-resize \\\n  -colors 256 \\\n  ./schemacrawler-website/src/site/resources/images/schemacrawler_logo.svg\
+        \ \\\n  ./schemacrawler-website/src/site/resources/images/schemacrawler_logo.ico\n\
+        # Create left-aligned 16:9 banner in two steps\nconvert \\\n  -background\
+        \ transparent \\\n  -density 1000 \\\n  -resize 450x450 \\\n  -border 100\
+        \ \\\n  -bordercolor transparent \\\n  ./schemacrawler-website/src/site/resources/images/schemacrawler_logo.svg\
+        \ \\\n  ./schemacrawler-website/src/site/resources/images/schemacrawler_banner.png\n\
+        convert \\\n  -background transparent \\\n  -density 1000 \\\n  -extent 1200x675\
+        \ \\\n  -gravity west \\\n  -bordercolor transparent \\\n  ./schemacrawler-website/src/site/resources/images/schemacrawler_banner.png\
+        \ \\\n  ./schemacrawler-website/src/site/resources/images/schemacrawler_banner.png\n"
+    - continue-on-error: true
+      id: upload-icons
       name: Upload generated icons
       uses: actions/upload-artifact@v4
       with:
         name: icons
         path: ./schemacrawler-website/src/site/resources/images/schemacrawler_*.*
         retention-days: 5
+name: Create Icons
+on:
+  repository_dispatch:
+    types: trigger-ga___create-icons.yml
+permissions: read-all

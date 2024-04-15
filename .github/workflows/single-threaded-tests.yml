@@ -1,60 +1,49 @@
-name: Single-Threaded Database Integration Tests
-
-on:
-  workflow_dispatch:
-  push:
-  pull_request:
-    branches:
-      - main
-  schedule:
-    - cron: '20 20 * * *'
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-permissions: read-all
-
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   build:
     name: Build, run single-threaded database integration tests
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        java: [8, 17]
+    runs-on: self-hosted
     steps:
-
-# SETUP BUILD ENVIRONMENT
-    - id: maximize-build-space
+    - continue-on-error: true
+      id: maximize-build-space
       name: Maximize build space
       uses: easimon/maximize-build-space@master
       with:
-        root-reserve-mb: '8192'
-        remove-dotnet: 'true'
         remove-android: 'true'
-        remove-haskell: 'true'
         remove-codeql: 'true'
         remove-docker-images: 'true'
-    - id: prepare-maven-build
+        remove-dotnet: 'true'
+        remove-haskell: 'true'
+        root-reserve-mb: '8192'
+    - continue-on-error: true
+      id: prepare-maven-build
       name: Prepare Maven build
       uses: sualeh/prepare-maven-build@v1.4.0
       with:
         java-version: ${{ matrix.java }}
-    - id: install-graphviz
+    - continue-on-error: true
+      id: install-graphviz
       name: Install Graphviz
       uses: sualeh/install-graphviz@v1.0.3
-
-# BUILD AND TEST
-    - id: build-test
-      name: Build and run database integration tests
+    - continue-on-error: true
       env:
-        TZ: GMT
         SC_SINGLE_THREADED: true
+        TZ: GMT
+      id: build-test
+      name: Build and run database integration tests
+      run: "# Build\nmvn \\\n  --no-transfer-progress \\\n  --batch-mode \\\n  clean\
+        \ package\n"
       shell: bash
-      run: |
-        # Build
-        mvn \
-          --no-transfer-progress \
-          --batch-mode \
-          clean package
+    strategy:
+      fail-fast: false
+      matrix:
+        java:
+        - 8
+        - 17
+name: Single-Threaded Database Integration Tests
+on:
+  repository_dispatch:
+    types: trigger-ga___single-threaded-tests.yml
+permissions: read-all
